@@ -107,6 +107,17 @@ plot_histogram(df_num)
 
 -   Should we normalize other variables (nationality, etc.) ?
 
+It is noted that different censuses seem to have different concentration of age, income, population, and foreigners - spaniards percentage. These might be important factors influencing the number of facilities in each census.
+
+```{r}
+cor_df <- df %>% 
+  select(n_pharmacies, n_schools, n_transport_salespoints, avg_age, family_income, population,pcg_foreigners)
+
+plot_correlation(cor_df)
+```
+
+It seems that these variables do not have high correlation with the targeted variables. The only noticeable ones are number of schools and average age (-0.2), number of schools and family income (0.18), number of schools and population (0.32), and number of transport POS and percentage of foreigners (0.16). It makes sense that older communities would not need schools in their area and areas with more people would need more schools. Foreigners may also move around the city more for sightseeing and visiting around so they would need more access to transport sales points.
+
 ## Feature selection
 
 ```{r}
