@@ -51,14 +51,6 @@ summary(df)
 
 -   pcg_age --\> pivot longer ?
 
-**Target variables**
-
--   Pharmacy - each census on average has 1 pharmacy, max = 5 --\> check if income affects this
-
--   School - each census has around 1 school, max = 12 --\> check these high values
-
--   transport - seems like many censuses lack sales points --\> geography might affect this?
-
 ```{r}
 #Convert to appropriate data type
 df <- df %>% 
@@ -70,6 +62,33 @@ df <- df %>%
   ) %>% 
   select(-foreigners) #duplicated column
 ```
+
+### **Target variables**
+
+-   Pharmacy - each census on average has 1 pharmacy, max = 5 --\> check if income affects this
+
+-   School - each census has around 1 school, max = 12 --\> check these high values
+
+-   transport - seems like many censuses lack sales points --\> geography might affect this?
+
+```{r}
+target_vars <- df %>% 
+  select(n_pharmacies, n_schools, n_transport_salespoints)
+
+summary(target_vars)
+```
+
+The average number of **pharmacies** in each census is 0.66 (median = 1) with range of 0 to 5. The average number of **schools** in each census is 0.91 (median = 0) and there are anywhere between 0 and 12 school in the censuses. The average number of number of **transport POS** is 0.27 (median = 0) and range from 0 to 4.
+
+It seems that about 50% of the censuses lack a pharmacy, school, and transport sales point, meaning that people living in these censuses would have to go to another location to get access to these services. Some censuses, however, have an excess of facilities.
+
+```{r}
+plot_histogram(target_vars)
+```
+
+From the plots, we can see that most censuses have 0 to 2 pharmacies in the area, 0 to 4 schools, and 0 to 1 transport POS. It is also noted that all 3 graphs are skewed to the right, suggesting that the distribution of facilities are not normal.
+
+The graph storngly indicate that some censuses might be lacking facilities in their areas. We will continue to explore the data set to identify possible variables contributing to this lack of facilities.
 
 ### Numerical Data
 
@@ -87,13 +106,6 @@ plot_histogram(df_num)
 -   Normal: avg_age, population, expense_home
 
 -   Should we normalize other variables (nationality, etc.) ?
-
-```{r}
-target_vars <- df %>% 
-  select(n_pharmacies, n_schools, n_transport_salespoints)
-
-plot_histogram(target_vars)
-```
 
 ## Feature selection
 
