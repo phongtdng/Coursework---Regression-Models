@@ -1,0 +1,126 @@
+---
+author: "Phong Duong - 100500507"
+title: "Data Science II - Assignment"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(data.table)
+library(tidyverse)
+library(DataExplorer)
+```
+
+# Problem description
+
+In our cities, there are some services that are essential for our daily living: **pharmacies, schools or transport points of sale.** However, these facilities are not necessarily well distributed. We want to analyze in this assignment which areas lacks of these facilities based on regression models. The steps to perform the analysis are:
+
+-   Do a descriptive analysis of data
+-   Are there variables we can discard?
+-   Perform a feature engineering process extending important variables.
+-   Perform regression modelling for the three target variables (three different models).
+-   Create a score to measure **which areas** have enough facilities and which ones don't.
+-   Which variables are the most highly related to the score? In particular, what makes a census section to have a low number of facilities?
+-   Visualize and discuss the results
+
+# Dataset description
+
+```{r}
+df<-fread("census_section_stats.csv", sep=";", dec=",", stringsAsFactors = F)
+head(df)
+```
+
+For every census section we have a row in our dataset, here are some of the main columns of the dataset: \* census_section_code: census_section_code identifier \* n_pharmacies (target variable 1): number of pharmacies in the census section \* n_schools (target variable 2): number of schools in the census section \* n_transport_salespoints: number of transport points of sale.
+
+# Descriptive analysis
+
+## Data Exploration
+
+### Brief Check of overall data
+
+```{r}
+str(df)
+summary(df)
+```
+
+-   No missing values in the data.
+
+-   census codes are integers --\> change to chr + factor
+
+-   race/nationality --\> pivot longer ?
+
+-   pcg_age --\> pivot longer ?
+
+**Target variables**
+
+-   Pharmacy - each census on average has 1 pharmacy, max = 5 --\> check if income affects this
+
+-   School - each census has around 1 school, max = 12 --\> check these high values
+
+-   transport - seems like many censuses lack sales points --\> geography might affect this?
+
+```{r}
+#Convert to appropriate data type
+df <- df %>% 
+  mutate(
+    census_section_code = as.character(census_section_code),
+    census_district_code = as.character(census_district_code),
+    city_code = as.character(city_code),
+    province_code = as.character(province_code)
+  ) %>% 
+  select(-foreigners) #duplicated column
+```
+
+### Numerical Data
+
+```{r}
+df_num <- df %>% 
+  select(where(is.numeric)) %>% 
+  select(-index)
+```
+
+```{r}
+#histogram
+plot_histogram(df_num)
+```
+
+-   Normal: avg_age, population, expense_home
+
+-   Should we normalize other variables (nationality, etc.) ?
+
+```{r}
+target_vars <- df %>% 
+  select(n_pharmacies, n_schools, n_transport_salespoints)
+
+plot_histogram(target_vars)
+```
+
+## Feature selection
+
+```{r}
+# TO DO: discard variables poorly related to target variables
+```
+
+# Feature engineering
+
+```{r}
+# TO DO
+```
+
+# Regression models
+
+```{r}
+# TO DO
+```
+
+## Score generation
+
+```{r}
+# TO DO
+```
+
+# Result analysis and visualization
+
+```{r}
+# TO DO
+```
