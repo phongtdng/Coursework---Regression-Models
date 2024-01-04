@@ -85,9 +85,21 @@ It seems that about 50% of the censuses lack a pharmacy, school, and transport s
 plot_histogram(target_vars)
 ```
 
-From the plots, we can see that most censuses have 0 to 2 pharmacies in the area, 0 to 4 schools, and 0 to 1 transport POS. It is also noted that all 3 graphs are skewed to the right, suggesting that the distribution of facilities are not normal.
+From the plots, we can see that most censuses have 0 to 2 pharmacies in the area, 0 to 4 schools, and 0 to 1 transport POS.
 
 The graph storngly indicate that some censuses might be lacking facilities in their areas. We will continue to explore the data set to identify possible variables contributing to this lack of facilities.
+
+It is also noted that all 3 graphs are skewed to the right, suggesting that the distribution of facilities are not normal. Since the variables are discreet and non-negative, a poisson regression might be a good fit for the model. We can check the first assumption (equidispersion) to see if it's a potential fit.
+
+```{r}
+data.frame(
+  mean = c(mean(df$n_pharmacies), mean(df$n_schools), mean(df$n_transport_salespoints)),
+  var = c(var(df$n_pharmacies), var(df$n_schools), var(df$n_transport_salespoints)),
+  row.names = c("pharmacy", "school", "transport")
+)
+```
+
+It seems that the target variables have similar mean and variance, this could indicate a call for poisson regression model. Although school has variance \> mean, which is case of overdispersion, we can still use different methods to improve the model such as a Quasi-poisson Regression.
 
 ### Numerical Data
 
@@ -166,7 +178,7 @@ plot(df$population_density)
 Since density is calculated by dividing the population by its area, we do not need population density in the model since it represents the information that could be given by area and population.
 
 ```{r}
-df_selected <- df %>% 
+selected_features <- df %>% 
   select(-c(index, province_code, pcg_foreigners, centroid, geometry, population_density))
 ```
 
@@ -175,7 +187,7 @@ Index is irrelevant for predicting model so we will drop it. The data set alread
 # Feature engineering
 
 ```{r}
-# TO DO
+
 ```
 
 # Regression models
