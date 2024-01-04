@@ -108,18 +108,40 @@ plot_histogram(df_num)
 
 It is noted that different censuses seem to have different concentration of age, income, population, and foreigners - spaniards percentage. These might be important factors influencing the number of facilities in each census.
 
-```{r}
-cor_df <- df %>% 
-  select(n_pharmacies, n_schools, n_transport_salespoints, avg_age, family_income, population,pcg_foreigners)
+### Correlation Analysis
 
-plot_correlation(cor_df)
+```{r}
+cor_rank <- function(data, col) {
+  cor<- cor(data, method = "pearson") %>% 
+  data.frame() %>% 
+  round(.,2) %>% 
+  select(all_of(col)) %>% 
+  filter(!(rownames(.) %in% c("n_pharmacies", "n_transport_salespoints", "n_schools")))
+  cor <- arrange(cor, desc(ifelse(cor[[col]] < 0, cor[[col]] * (-1), cor[[col]])))
+  return(cor)
+}
+
+cor_df_pharmacy <- cor_rank(df_num, "n_pharmacies")
+cor_df_pharmacy
 ```
 
-It seems that these variables do not have high correlation with the targeted variables. The only noticeable ones are number of schools and average age (-0.2), number of schools and family income (0.18), number of schools and population (0.32), and number of transport POS and percentage of foreigners (0.16). It makes sense that older communities would not need schools in their area and areas with more people would need more schools. Foreigners may also move around the city more for sightseeing and visiting around so they would need more access to transport sales points.
+It seems that the percentage of Italian in the census has the highest correlation to the number of pharmacies in the area. Although, it might not make logical sense, sometimes cultural factors have a lot of influence of the distribution of facilities in a city. City_population, population and income_per_capita are the next top variables correlated to the number of pharmacies. It is normal to think that these are relevant as more populated areas would need more facilities. It is worth noting that city_population and population might produce multicolinearity as they one influences the other so we might need to remove one of them. Some variables have very low (close to 0) correlation so we might consider removing them for the model accuracy.
+
+```{r}
+cor_df_school <- cor_rank(df_num, "n_schools")
+cor_df_school
+```
+
+For number of schools, population density have very high correlation (-0.44) and so does population (0.32). It makes sense that larger population might need more schools and high population density area would indicate less area for building schools. Younger age group percentage (0-24) also has some positive correlation to school, which makes sense as this group of population demands for education.
+
+```{r}
+cor_df_transport <- cor_rank(df_num, "n_transport_salespoints")
+cor_df_transport
+```
+
+It seems that foreigner and non-foreigner (spanish) population are correlated to the distribution of number of transport sales points. It is noted that foreigners and pcg_foreigners might be identical so we will only use one of them to build the model.
 
 ## Feature selection
-
-### Filtering
 
 ```{r}
 df %>% distinct(province_code)
@@ -149,32 +171,6 @@ df_selected <- df %>%
 ```
 
 Index is irrelevant for predicting model so we will drop it. The data set already has area so centroid will not be much of help. Similarly, geometry might not be necessary for the model.
-
-### Pearson's Correlation
-
-```{r}
-# TO DO: discard variables poorly related to target variables
-cor_rank <- function(data, col) {
-  cor<- cor(data, method = "pearson") %>% 
-  data.frame() %>% 
-  round(.,2) %>% 
-  select(all_of(col)) %>% 
-  filter(!(rownames(.) %in% c("n_pharmacies", "n_transport_salespoints", "n_schools")))
-  cor <- arrange(cor, desc(ifelse(cor[[col]] < 0, cor[[col]] * (-1), cor[[col]])))
-  return(cor)
-}
-
-cor_df_pharmacy <- cor_rank(df_num, "n_pharmacies")
-cor_df_pharmacy
-
-cor_df_school <- cor_rank(df_num, "n_schools")
-cor_df_school
-
-cor_df_transport <- cor_rank(df_num, "n_transport_salespoints")
-cor_df_transport
-
-
-```
 
 # Feature engineering
 
