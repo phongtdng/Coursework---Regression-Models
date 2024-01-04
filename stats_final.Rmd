@@ -162,17 +162,13 @@ df %>% distinct(province_code)
 Province_code also only has 1 observation, therefore, will also not be useful for the model.
 
 ```{r}
-par(mfrow = c(1,2))
-plot(df$foreigners)
-plot(df$pcg_foreigners)
+cor(df$foreigners, df$pcg_foreigners)
 ```
 
 Foreginers and pcg_foreigners have the same values, thus, we will only need to include one of them in the model.
 
 ```{r}
-par(mfrow = c(1,2))
-plot(df$population/df$area)
-plot(df$population_density)
+cor(df$population/df$area, df$population_density)
 ```
 
 Since density is calculated by dividing the population by its area, we do not need population density in the model since it represents the information that could be given by area and population.
