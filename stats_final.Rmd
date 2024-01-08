@@ -13,6 +13,8 @@ library(tidyverse)
 library(DataExplorer)
 library(caret) 
 library(Metrics)
+library(MASS)
+library(e1071)
 ```
 
 # Problem description
@@ -173,7 +175,7 @@ Foreginers and pcg_foreigners have the same values, thus, we will only need to i
 
 ```{r}
 selected_features <- df %>% 
-  select(-c(index, province_code, pcg_foreigners, geometry))
+  select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry))
 ```
 
 Index is irrelevant for predicting model so we will drop it. The data set already has area so geometry will not be much of help.
@@ -217,10 +219,10 @@ We hypothesise that as population increases the facilities should also increase 
 ## Baseline Model
 
 ```{r}
-toTrain <- createDataPartition(df$n_pharmacies, p = .80, list = FALSE)
+toTrain <- createDataPartition(fe_df$n_pharmacies, p = .80, list = FALSE)
 
-train_b <- df[toTrain,]
-test_b <- df[-toTrain,]
+trainData <- fe_df[toTrain,]
+testData <- fe_df[-toTrain,]
 
 error_summary <- function(test, predict) {
   mse <- mse(test, predict)
@@ -235,22 +237,24 @@ error_summary <- function(test, predict) {
 ### Pharmacy
 
 ```{r}
-error_summary(train_b$n_pharmacies, mean(train_b$n_pharmacies))
+error_summary(testData$n_pharmacies, mean(trainData$n_pharmacies))
 ```
 
 ### School
 
 ```{r}
-error_summary(train_b$n_schools, mean(train_b$n_schools))
+error_summary(testData$n_schools, mean(train_b$n_schools))
 ```
 
 ### Transport POS
 
 ```{r}
-error_summary(train_b$n_transport_salespoints, mean(train_b$n_transport_salespoints))
+error_summary(testData$n_transport_salespoints, mean(train_b$n_transport_salespoints))
 ```
 
 ## Multilinear Model
+
+### Pharmacy
 
 ```{r}
 
