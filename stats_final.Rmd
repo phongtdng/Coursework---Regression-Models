@@ -9,6 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(tidyverse)
 library(DataExplorer)
+library(caret) 
 ```
 
 # Problem description
@@ -144,7 +145,7 @@ cor_df_school <- cor_rank(df_num, "n_schools")
 cor_df_school
 ```
 
-For number of schools, population density have very high correlation (-0.44) and so does population (0.32). It makes sense that larger population might need more schools and high population density area would indicate less area for building schools. Younger age group percentage (0-24) also has some positive correlation to school, which makes sense as this group of population demands for education.
+For number of schools, population density have quite high correlation (-0.44) and so does population (0.32). It makes sense that larger population might need more schools and high population density area would indicate less area for building schools. Younger age group percentage (0-24) also has some positive correlation to school, which makes sense as this group of population demands for education.
 
 ```{r}
 cor_df_transport <- cor_rank(df_num, "n_transport_salespoints")
@@ -168,23 +169,45 @@ cor(df$foreigners, df$pcg_foreigners)
 Foreginers and pcg_foreigners have the same values, thus, we will only need to include one of them in the model.
 
 ```{r}
-cor(df$population/df$area, df$population_density)
-```
-
-Since density is calculated by dividing the population by its area, we do not need population density in the model since it represents the information that could be given by area and population.
-
-```{r}
 selected_features <- df %>% 
-  select(-c(index, province_code, pcg_foreigners, centroid, geometry, population_density))
+  select(-c(index, province_code, pcg_foreigners, geometry))
 ```
 
-Index is irrelevant for predicting model so we will drop it. The data set already has area so centroid will not be much of help. Similarly, geometry might not be necessary for the model.
+Index is irrelevant for predicting model so we will drop it. The data set already has area so geometry will not be much of help.
 
 # Feature engineering
 
 ```{r}
-
+#Extracting latitude and longitude from centroid
+selected_features %>% 
+  mutate(centroid = str_extract_all(centroid, "\\d+.\\d+")) %>% 
+  unnest_wider(col = c(centroid), names_sep = "_") %>% 
+  rename(lat = centroid_1, long = centroid_2) %>% 
+  mutate(lat = as.numeric(lat), long = as.numeric(long))
 ```
+
+```{r}
+selected_features %>% 
+  mutate(
+    age_bin = cut(avg_age, breaks = c(0, 25, 40, 50, 60, 70, 100))
+  ) %>% 
+  relocate(age_bin, .after = avg_age) 
+```
+
+```{r}
+fe_df <- selected_features %>% 
+  mutate(
+    population_2 = population**2,
+    population_density_2 = population_density**2,
+    city_population_2 = city_population**2,
+    family_income_2 = family_income**2,
+    income_per_capita_2 = income_per_capita**2,
+    avg_age_2 = avg_age**2,
+    foreigners_2 = foreigners**2
+  )
+```
+
+We hypothesise that as population increases the facilities should also increase as the need and demand would be higher. Income could also affect the number of facilities as the census would have more capital to build facilities. We also found some correlation between age and number of schools as the younger age group would need access to schools, meaning more schools needed in the area. Finally, we also found some correlation between foreigner percentage and number of transport sales points, indicating cultural influence on facility distribution. We expect that the relationship between these variables and our target variables have a cap (as each census can only hold a certain maximum people depending on their layout and size). Therefore, we create a quadratic term for each of those variables to see if they will help our model.
 
 # Regression models
 
