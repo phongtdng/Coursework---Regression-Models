@@ -252,7 +252,7 @@ error_summary(testData$n_schools, mean(train_b$n_schools))
 error_summary(testData$n_transport_salespoints, mean(train_b$n_transport_salespoints))
 ```
 
-## Multilinear Model
+## Regression Models
 
 ### Pharmacy
 
@@ -265,39 +265,41 @@ set.seed(100507500)
 #Train model
 train_control <- trainControl(method = "cv", number = 10)
 
+#Linear Model
 lm_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData, 
                 method = "lm", 
                 trControl = train_control)
 
 lm_fit_pharmacy
-getTrainPerf(lm_fit_pharmacy) #Average performance across all models
+
+#Poisson model
+poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
+                              method = "glm", family = "poisson",
+                              trControl = train_control
+)
+poisson_fit_pharmacy
+
+#Compare model performance on trainData
+results <- resamples(list(linear = lm_fit_pharmacy, poisson = poisson_fit_pharmacy))
+summary(results)
 
 #Importance variables
 varImp(lm_fit_pharmacy)
-ggplot(varImp(lm_fit_pharmacy))
+varImp(poisson_fit_pharmacy)
+
 
 #Predict on testData
-predict_pharmacy_lm <- predict(lm_fit_pharmacy, testData)
-predict_pharmacy_lm
-
 test_phar <- testData %>% mutate(
-  pred = predict_pharmacy_lm
+  pred_lm = predict(lm_fit_pharmacy, testData),
+  pred_poisson = predict(poisson_fit_pharmacy, testData)
 )
-test_phar %>% select(n_pharmacies, pred)
+test_phar %>% select(n_pharmacies, pred_lm, pred_poisson)
 
-#Performance on the test
-mean(lm_fit_pharmacy$resample$MAE) #train data MAE
-
+#Compare model performance on testData
 postResample(
-  pred = test_phar$pred,
+  pred = test_phar$pred_lm,
   obs = test_phar$n_pharmacies
 )
-```
-
-## Poisson Model
-
-```{r}
-
 ```
 
 ## Score generation
