@@ -4,12 +4,15 @@ title: "Data Science II - Assignment"
 output: html_document
 ---
 
+# Libraries
+
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(tidyverse)
 library(DataExplorer)
 library(caret) 
+library(Metrics)
 ```
 
 # Problem description
@@ -211,8 +214,52 @@ We hypothesise that as population increases the facilities should also increase 
 
 # Regression models
 
+## Baseline Model
+
 ```{r}
-# TO DO
+toTrain <- createDataPartition(df$n_pharmacies, p = .80, list = FALSE)
+
+train_b <- df[toTrain,]
+test_b <- df[-toTrain,]
+
+error_summary <- function(test, predict) {
+  mse <- mse(test, predict)
+  mae <- mae(test, predict)
+  data.frame(
+    values = c(mse, mae),
+    row.names = c("MSE", "MAE")
+  )
+}
+```
+
+### Pharmacy
+
+```{r}
+error_summary(train_b$n_pharmacies, mean(train_b$n_pharmacies))
+```
+
+### School
+
+```{r}
+error_summary(train_b$n_schools, mean(train_b$n_schools))
+```
+
+### Transport POS
+
+```{r}
+error_summary(train_b$n_transport_salespoints, mean(train_b$n_transport_salespoints))
+```
+
+## Multilinear Model
+
+```{r}
+
+```
+
+## Poisson Model
+
+```{r}
+
 ```
 
 ## Score generation
