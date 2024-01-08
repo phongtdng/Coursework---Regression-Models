@@ -175,7 +175,7 @@ Foreginers and pcg_foreigners have the same values, thus, we will only need to i
 
 ```{r}
 selected_features <- df %>% 
-  select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry))
+  select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry, centroid))
 ```
 
 Index is irrelevant for predicting model so we will drop it. The data set already has area so geometry will not be much of help.
@@ -257,7 +257,41 @@ error_summary(testData$n_transport_salespoints, mean(train_b$n_transport_salespo
 ### Pharmacy
 
 ```{r}
+lm_model_pharmacy <- lm(n_pharmacies ~ ., data = fe_df)
+summary(lm_model_pharmacy)
 
+set.seed(100507500)
+
+#Train model
+train_control <- trainControl(method = "cv", number = 10)
+
+lm_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData, 
+                method = "lm", 
+                trControl = train_control)
+
+lm_fit_pharmacy
+getTrainPerf(lm_fit_pharmacy) #Average performance across all models
+
+#Importance variables
+varImp(lm_fit_pharmacy)
+ggplot(varImp(lm_fit_pharmacy))
+
+#Predict on testData
+predict_pharmacy_lm <- predict(lm_fit_pharmacy, testData)
+predict_pharmacy_lm
+
+test_phar <- testData %>% mutate(
+  pred = predict_pharmacy_lm
+)
+test_phar %>% select(n_pharmacies, pred)
+
+#Performance on the test
+mean(lm_fit_pharmacy$resample$MAE) #train data MAE
+
+postResample(
+  pred = test_phar$pred,
+  obs = test_phar$n_pharmacies
+)
 ```
 
 ## Poisson Model
