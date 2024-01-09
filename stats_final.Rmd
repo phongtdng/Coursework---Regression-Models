@@ -49,13 +49,7 @@ str(df)
 summary(df)
 ```
 
--   No missing values in the data.
-
--   census codes are integers --\> change to chr + factor
-
--   race/nationality --\> pivot longer ?
-
--   pcg_age --\> pivot longer ?
+No missing data (NA)
 
 ```{r}
 #Convert to appropriate data type
@@ -93,7 +87,7 @@ plot_histogram(target_vars)
 
 From the plots, we can see that most censuses have 0 to 2 pharmacies in the area, 0 to 4 schools, and 0 to 1 transport POS.
 
-The graph storngly indicate that some censuses might be lacking facilities in their areas. We will continue to explore the data set to identify possible variables contributing to this lack of facilities.
+The graph strongly indicate that some censuses might be lacking facilities in their areas. We will continue to explore the data set to identify possible variables contributing to this lack of facilities.
 
 It is also noted that all 3 graphs are skewed to the right, suggesting that the distribution of facilities are not normal. Since the variables are discreet and non-negative, a poisson regression might be a good fit for the model. We can check the first assumption (equidispersion) to see if it's a potential fit.
 
@@ -120,13 +114,22 @@ df_num <- df %>%
 plot_histogram(df_num)
 ```
 
--   Normal: avg_age, population, expense_home
-
--   Should we normalize other variables (nationality, etc.) ?
-
 It is noted that different censuses seem to have different concentration of age, income, population, and foreigners - spaniards percentage. These might be important factors influencing the number of facilities in each census.
 
 ### Correlation Analysis
+
+```{r}
+#Correlation Matrix
+cor_matrix <- cor(df_num)
+
+findCorrelation(
+  cor_matrix,
+  cutoff = 0.6,
+  verbose = T,
+  names = T,
+  exact = T
+)
+```
 
 ```{r}
 cor_rank <- function(data, col) {
@@ -158,6 +161,12 @@ cor_df_transport
 ```
 
 It seems that foreigner and non-foreigner (spanish) population are correlated to the distribution of number of transport sales points. It is noted that foreigners and pcg_foreigners might be identical so we will only use one of them to build the model.
+
+### Zero Variance Variables
+
+```{r}
+nearZeroVar(df, saveMetrics = TRUE) %>% filter(nzv == TRUE | zeroVar == TRUE) 
+```
 
 ## Feature selection
 
