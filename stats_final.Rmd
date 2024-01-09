@@ -275,31 +275,75 @@ lm_fit_pharmacy
 #Poisson model
 poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
                               method = "glm", family = "poisson",
-                              trControl = train_control
-)
+                              trControl = train_control)
 poisson_fit_pharmacy
 
+#Quasi-Poisson
+quasi_poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
+                              method = "glm", family = "quasi",
+                              trControl = train_control)
+
+quasi_poisson_fit_pharmacy
+#Lasso Regression
+#Ridge Regression
+#Elastic Net
+elasticnet_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData, 
+                method = "glmnet", 
+                trControl = train_control)
+
+elasticnet_fit_pharmacy
+```
+
+```{r}
 #Compare model performance on trainData
-results <- resamples(list(linear = lm_fit_pharmacy, poisson = poisson_fit_pharmacy))
+results <- resamples(list(linear = lm_fit_pharmacy, 
+                          poisson = poisson_fit_pharmacy,
+                          quasi_poisson = quasi_poisson_fit_pharmacy, 
+                          elasticNet = elasticnet_fit_pharmacy))
 summary(results)
+```
 
+```{r}
 #Importance variables
-varImp(lm_fit_pharmacy)
-varImp(poisson_fit_pharmacy)
+tibble(
+  lm = rownames(varImp(lm_fit_pharmacy)$importance)[1:20],
+  poisson = rownames(varImp(poisson_fit_pharmacy)$importance)[1:20],
+  quasi_poisson = rownames(varImp(quasi_poisson_fit_pharmacy)$importance)[1:20],
+  elasticNet = rownames(varImp(elasticnet_fit_pharmacy)$importance)[1:20]
+)
+```
 
-
+```{r}
 #Predict on testData
 test_phar <- testData %>% mutate(
   pred_lm = predict(lm_fit_pharmacy, testData),
-  pred_poisson = predict(poisson_fit_pharmacy, testData)
+  pred_poisson = predict(poisson_fit_pharmacy, testData),
+  pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData),
+  pred_elasticNet = predict(elasticnet_fit_pharmacy, testData)
 )
-test_phar %>% select(n_pharmacies, pred_lm, pred_poisson)
+test_phar %>% select(n_pharmacies,contains("pred"))
+```
 
+```{r}
 #Compare model performance on testData
-postResample(
-  pred = test_phar$pred_lm,
-  obs = test_phar$n_pharmacies
+list(
+  lm = mae(test_phar$pred_lm, test_phar$n_pharmacies),
+  poisson = mae(test_phar$pred_poisson, test_phar$n_pharmacies),
+  quasi_poisson = mae(test_phar$pred_quasipoisson, test_phar$n_pharmacies),
+  elasticNet = mae(test_phar$pred_elasticNet, test_phar$n_pharmacies)
 )
+```
+
+### School
+
+```{r}
+
+```
+
+### Transport POS
+
+```{r}
+
 ```
 
 ## Score generation
