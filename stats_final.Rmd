@@ -257,9 +257,6 @@ error_summary(testData$n_transport_salespoints, mean(train_b$n_transport_salespo
 ### Pharmacy
 
 ```{r}
-lm_model_pharmacy <- lm(n_pharmacies ~ ., data = fe_df)
-summary(lm_model_pharmacy)
-
 set.seed(100507500)
 
 #Train model
@@ -301,7 +298,11 @@ results <- resamples(list(linear = lm_fit_pharmacy,
                           quasi_poisson = quasi_poisson_fit_pharmacy, 
                           elasticNet = elasticnet_fit_pharmacy))
 summary(results)
+
+bwplot(results, scales = list(x=list(relation="free"), y=list(relation="free")))
 ```
+
+On train data, lm performs better than the rest.
 
 ```{r}
 #Importance variables
@@ -312,6 +313,8 @@ tibble(
   elasticNet = rownames(varImp(elasticnet_fit_pharmacy)$importance)[1:20]
 )
 ```
+
+Most important variables: area, population, family income, income per capita, average age, and spanish percentage.
 
 ```{r}
 #Predict on testData
@@ -333,6 +336,8 @@ list(
   elasticNet = mae(test_phar$pred_elasticNet, test_phar$n_pharmacies)
 )
 ```
+
+On test data, lm and quasi_poisson performs better.
 
 ### School
 
