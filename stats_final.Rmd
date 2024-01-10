@@ -4,13 +4,15 @@ title: "Data Science II - Assignment"
 output: html_document
 ---
 
-# Libraries
+# Loading packages
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(data.table)
 library(tidyverse)
 library(DataExplorer)
+library(corrplot)
+library(glmnet)
 library(caret) 
 library(Metrics)
 library(MASS)
@@ -179,22 +181,72 @@ It seems that foreigner and non-foreigner (spanish) population are correlated to
 ### Zero Variance Variables
 
 ```{r}
-nearZeroVar(df, saveMetrics = TRUE) %>% filter(nzv == TRUE | zeroVar == TRUE) 
+nearZeroVar(df, saveMetrics = TRUE) %>% filter(nzv == TRUE | zeroVar == TRUE) %>% row.names()
 ```
 
+It seems that province code only has 1 value for all observations and pcg_num_transaction_city has a very low variance. We will check them to see if we should remove them since they might not offer much help to our model.
+
 ## Feature selection
+
+#### Checking features with low variance and are duplicated
 
 ```{r}
 df %>% distinct(province_code)
 ```
 
-Province_code also only has 1 observation, therefore, will also not be useful for the model.
+Province_code also only has 1 observation, therefore, it will not be useful for the model.
+
+```{r}
+df %>% distinct(pcg_num_transaction_city)
+```
+
+pcg_num_transaction_city has some variation in values so we will keep it for now.
 
 ```{r}
 cor(df$foreigners, df$pcg_foreigners)
 ```
 
 Foreginers and pcg_foreigners have the same values, thus, we will only need to include one of them in the model.
+
+#### Dimensionality Reduction
+
+```{r}
+elastic_p <- train(
+  n_pharmacies ~., data = df_num, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+  )
+coef(elastic_p$finalModel, elastic_p$bestTune$lambda) %>% 
+  as.matrix() %>% 
+  data.frame() %>% 
+  filter(s1 == 0)
+```
+
+```{r}
+elastic_s <- train(
+  n_schools ~., data = df_num, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+  )
+coef(elastic_s$finalModel, elastic_s$bestTune$lambda) %>% 
+  as.matrix() %>% 
+  data.frame() %>% 
+  filter(s1 == 0)
+```
+
+```{r}
+elastic_t <- train(
+  n_transport_salespoints ~., data = df_num, method = "glmnet",
+  trControl = trainControl("cv", number = 10),
+  tuneLength = 10
+  )
+coef(elastic_t$finalModel, elastic_t$bestTune$lambda) %>% 
+  as.matrix() %>% 
+  data.frame() %>% 
+  filter(s1 == 0)
+```
+
+#### Final Selection
 
 ```{r}
 selected_features <- df %>% 
@@ -239,14 +291,19 @@ We hypothesise that as population increases the facilities should also increase 
 
 # Regression models
 
-## Baseline Model
+## Splitting Dataset
 
 ```{r}
 toTrain <- createDataPartition(fe_df$n_pharmacies, p = .80, list = FALSE)
 
 trainData <- fe_df[toTrain,]
 testData <- fe_df[-toTrain,]
+```
 
+## Baseline Model
+
+```{r}
+#Helper function
 error_summary <- function(test, predict) {
   mse <- mse(test, predict)
   mae <- mae(test, predict)
