@@ -61,7 +61,12 @@ df <- df %>%
     census_district_code = as.character(census_district_code),
     city_code = as.character(city_code),
     province_code = as.character(province_code)
-  )
+  ) %>% #Extracting latitude and longitude from centroid
+  mutate(centroid = str_extract_all(centroid, "\\d+.\\d+")) %>% 
+  unnest_wider(col = c(centroid), names_sep = "_") %>% 
+  rename(lat = centroid_1, long = centroid_2) %>% 
+  mutate(lat = as.numeric(lat), long = as.numeric(long))
+
 ```
 
 ### **Target variables**
@@ -181,7 +186,7 @@ It seems that foreigner and non-foreigner (spanish) population are correlated to
 ### Zero Variance Variables
 
 ```{r}
-nearZeroVar(df, saveMetrics = TRUE) %>% filter(nzv == TRUE | zeroVar == TRUE) %>% row.names()
+nearZeroVar(df, saveMetrics = TRUE) %>% filter(nzv == TRUE | zeroVar == TRUE)
 ```
 
 It seems that province code only has 1 value for all observations and pcg_num_transaction_city has a very low variance. We will check them to see if we should remove them since they might not offer much help to our model.
@@ -256,23 +261,6 @@ selected_features <- df %>%
 Index is irrelevant for predicting model so we will drop it. The data set already has area so geometry will not be much of help.
 
 # Feature engineering
-
-```{r}
-#Extracting latitude and longitude from centroid
-selected_features %>% 
-  mutate(centroid = str_extract_all(centroid, "\\d+.\\d+")) %>% 
-  unnest_wider(col = c(centroid), names_sep = "_") %>% 
-  rename(lat = centroid_1, long = centroid_2) %>% 
-  mutate(lat = as.numeric(lat), long = as.numeric(long))
-```
-
-```{r}
-selected_features %>% 
-  mutate(
-    age_bin = cut(avg_age, breaks = c(0, 25, 40, 50, 60, 70, 100))
-  ) %>% 
-  relocate(age_bin, .after = avg_age) 
-```
 
 ```{r}
 fe_df <- selected_features %>% 
