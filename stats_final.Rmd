@@ -256,9 +256,10 @@ coef(elastic_t$finalModel, elastic_t$bestTune$lambda) %>%
 ```{r}
 selected_features <- df %>% 
   select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry, centroid))
-```
 
-Index is irrelevant for predicting model so we will drop it. The data set already has area so geometry will not be much of help.
+fs_p <- df_num %>% 
+  select(-c(lat, avg_age, foreigners, europeans, germans, romanian, moroccan, american, chilean, pcg_age_25_39))
+```
 
 # Feature engineering
 
@@ -273,6 +274,15 @@ fe_df <- selected_features %>%
     avg_age_2 = avg_age**2,
     foreigners_2 = foreigners**2
   )
+
+fe_p <- fs_p %>% 
+  mutate(
+    population_2 = population**2,
+    population_density_2 = population_density**2,
+    city_population_2 = city_population**2,
+    family_income_2 = family_income**2,
+    income_per_capita_2 = income_per_capita**2
+  )
 ```
 
 We hypothesise that as population increases the facilities should also increase as the need and demand would be higher. Income could also affect the number of facilities as the census would have more capital to build facilities. We also found some correlation between age and number of schools as the younger age group would need access to schools, meaning more schools needed in the area. Finally, we also found some correlation between foreigner percentage and number of transport sales points, indicating cultural influence on facility distribution. We expect that the relationship between these variables and our target variables have a cap (as each census can only hold a certain maximum people depending on their layout and size). Therefore, we create a quadratic term for each of those variables to see if they will help our model.
@@ -282,10 +292,10 @@ We hypothesise that as population increases the facilities should also increase 
 ## Splitting Dataset
 
 ```{r}
-toTrain <- createDataPartition(fe_df$n_pharmacies, p = .80, list = FALSE)
+toTrain <- createDataPartition(fe_p$n_pharmacies, p = .80, list = FALSE)
 
-trainData <- fe_df[toTrain,]
-testData <- fe_df[-toTrain,]
+trainData <- fe_p[toTrain,]
+testData <- fe_p[-toTrain,]
 ```
 
 ## Baseline Model
@@ -349,22 +359,13 @@ quasi_poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
                               trControl = train_control)
 
 quasi_poisson_fit_pharmacy
-#Lasso Regression
-#Ridge Regression
-#Elastic Net
-elasticnet_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData, 
-                method = "glmnet", 
-                trControl = train_control)
-
-elasticnet_fit_pharmacy
 ```
 
 ```{r}
 #Compare model performance on trainData
 results <- resamples(list(linear = lm_fit_pharmacy, 
                           poisson = poisson_fit_pharmacy,
-                          quasi_poisson = quasi_poisson_fit_pharmacy, 
-                          elasticNet = elasticnet_fit_pharmacy))
+                          quasi_poisson = quasi_poisson_fit_pharmacy))
 summary(results)
 
 bwplot(results, scales = list(x=list(relation="free"), y=list(relation="free")))
@@ -377,8 +378,7 @@ On train data, lm performs better than the rest.
 tibble(
   lm = rownames(varImp(lm_fit_pharmacy)$importance)[1:20],
   poisson = rownames(varImp(poisson_fit_pharmacy)$importance)[1:20],
-  quasi_poisson = rownames(varImp(quasi_poisson_fit_pharmacy)$importance)[1:20],
-  elasticNet = rownames(varImp(elasticnet_fit_pharmacy)$importance)[1:20]
+  quasi_poisson = rownames(varImp(quasi_poisson_fit_pharmacy)$importance)[1:20]
 )
 ```
 
@@ -389,8 +389,7 @@ Most important variables: area, population, family income, income per capita, av
 test_phar <- testData %>% mutate(
   pred_lm = predict(lm_fit_pharmacy, testData),
   pred_poisson = predict(poisson_fit_pharmacy, testData),
-  pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData),
-  pred_elasticNet = predict(elasticnet_fit_pharmacy, testData)
+  pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData)
 )
 test_phar %>% select(n_pharmacies,contains("pred"))
 ```
@@ -400,8 +399,7 @@ test_phar %>% select(n_pharmacies,contains("pred"))
 list(
   lm = mae(test_phar$pred_lm, test_phar$n_pharmacies),
   poisson = mae(test_phar$pred_poisson, test_phar$n_pharmacies),
-  quasi_poisson = mae(test_phar$pred_quasipoisson, test_phar$n_pharmacies),
-  elasticNet = mae(test_phar$pred_elasticNet, test_phar$n_pharmacies)
+  quasi_poisson = mae(test_phar$pred_quasipoisson, test_phar$n_pharmacies)
 )
 ```
 
