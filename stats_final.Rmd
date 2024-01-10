@@ -116,6 +116,20 @@ plot_histogram(df_num)
 
 It is noted that different censuses seem to have different concentration of age, income, population, and foreigners - spaniards percentage. These might be important factors influencing the number of facilities in each census.
 
+### Bivariate Analysis
+
+```{r}
+plot_boxplot(df_num, by = "n_pharmacies")
+```
+
+```{r}
+plot_boxplot(df_num, by = "n_schools")
+```
+
+```{r}
+plot_boxplot(df_num, by = "n_transport_salespoints")
+```
+
 ### Correlation Analysis
 
 ```{r}
