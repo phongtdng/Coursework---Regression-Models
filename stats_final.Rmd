@@ -210,10 +210,12 @@ elastic_s <- train(
   trControl = trainControl("cv", number = 10),
   tuneLength = 10
   )
-coef(elastic_s$finalModel, elastic_s$bestTune$lambda) %>% 
+
+coef0_s <- coef(elastic_s$finalModel, elastic_s$bestTune$lambda) %>% 
   as.matrix() %>% 
   data.frame() %>% 
-  filter(s1 == 0)
+  filter(s1 == 0) %>% 
+  row.names()
 ```
 
 ```{r}
@@ -223,20 +225,24 @@ elastic_t <- train(
   trControl = trainControl("cv", number = 10),
   tuneLength = 10
   )
-coef(elastic_t$finalModel, elastic_t$bestTune$lambda) %>% 
+coef0_t <- coef(elastic_t$finalModel, elastic_t$bestTune$lambda) %>% 
   as.matrix() %>% 
   data.frame() %>% 
-  filter(s1 == 0)
+  filter(s1 == 0) %>% 
+  row.names()
 ```
 
 #### Final Selection
 
 ```{r}
-selected_features <- df %>% 
-  select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry, centroid))
-
 fs_p <- df_num %>% 
   select(-all_of(coef0_p))
+
+fs_s <- df_num %>% 
+  select(-all_of(coef0_s))
+
+fs_t <- df_num %>% 
+  select(-all_of(coef0_t))
 ```
 
 # Feature engineering
@@ -256,6 +262,14 @@ fe_df <- selected_features %>%
 fe_p <- fs_p %>% 
   mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
   mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
+
+fe_s <- fs_s %>% 
+  mutate(across(c("area":"family_income", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
+  mutate(across(c("area":"family_income", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
+
+fe_t <- fs_t %>% 
+  mutate(across(c("area","population":"avg_age", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
+  mutate(across(c("area","population":"avg_age", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
 ```
 
 We hypothesise that there is a cap for the incremental relationship between the predictor and the response variable, for example an increase in area could mean a higher amount of facilities but there is a max a amount of facilities that could be built due to other reasons like population density, income, etc. Therefore, we are adding quadratic and cubic terms to help the model performance.
@@ -268,8 +282,17 @@ We hypothesise that there is a cap for the incremental relationship between the 
 set.seed(100507500)
 toTrain <- createDataPartition(fe_p$n_pharmacies, p = .80, list = FALSE)
 
+#Pharmacy
 trainData_p <- fe_p[toTrain,]
 testData_p <- fe_p[-toTrain,]
+
+#School
+trainData_s <- fe_s[toTrain,]
+testData_s <- fe_s[-toTrain,]
+
+#Transport
+trainData_t <- fe_t[toTrain,]
+testData_t <- fe_t[-toTrain,]
 ```
 
 ## Baseline Model
@@ -277,31 +300,25 @@ testData_p <- fe_p[-toTrain,]
 ```{r}
 #Helper function
 error_summary <- function(test, predict) {
-  mse <- mse(test, predict)
+  rmse <- rmse(test, predict)
   mae <- mae(test, predict)
   data.frame(
-    values = c(mse, mae),
-    row.names = c("MSE", "MAE")
+    values = c(rmse, mae),
+    row.names = c("RMSE", "MAE")
   )
 }
 ```
 
-### Pharmacy
-
 ```{r}
-error_summary(testData$n_pharmacies, mean(trainData$n_pharmacies))
+error_summary(testData_p$n_pharmacies, mean(trainData_p$n_pharmacies))
 ```
 
-### School
-
 ```{r}
-error_summary(testData$n_schools, mean(train_b$n_schools))
+error_summary(testData_s$n_schools, mean(trainData_s$n_schools))
 ```
 
-### Transport POS
-
 ```{r}
-error_summary(testData$n_transport_salespoints, mean(train_b$n_transport_salespoints))
+error_summary(testData_t$n_transport_salespoints, mean(trainData_t$n_transport_salespoints))
 ```
 
 ## Regression Models
@@ -343,13 +360,13 @@ neg_bin_fit_pharmacy
 
 ```{r}
 #Compare model performance on trainData
-results <- resamples(list(linear = lm_fit_pharmacy, 
+results_p <- resamples(list(linear = lm_fit_pharmacy, 
                           poisson = poisson_fit_pharmacy,
                           quasi_poisson = quasi_poisson_fit_pharmacy,
                           neg_bin = neg_bin_fit_pharmacy))
-summary(results)
+summary(results_p)
 
-bwplot(results, scales = list(x=list(relation="free"), y=list(relation="free")))
+bwplot(results_p, scales = list(x=list(relation="free"), y=list(relation="free")))
 ```
 
 On train data, lm performs better than the rest.
@@ -373,32 +390,35 @@ test_res_p <- testData_p %>% mutate(
 )
 
 #Compare model performance on testData
-post_test_performance <- data.frame(
+post_test_performance <- function(pred_df, tar) {
+  df <- data.frame(
   model = c("lm", "poisson", "quasi_poisson", "neg_bin"),
   MAE = c(
-    MAE(test_res_p$pred_lm, test_res_p$n_pharmacies),
-    MAE(test_res_p$pred_poisson, test_res_p$n_pharmacies),
-    MAE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
-    MAE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
+    MAE(pred_df$pred_lm, tar),
+    MAE(pred_df$pred_poisson, tar),
+    MAE(pred_df$pred_quasipoisson, tar),
+    MAE(pred_df$pred_quasipoisson, tar)
   ),
   RMSE = c(
-    RMSE(test_res_p$pred_lm, test_res_p$n_pharmacies),
-    RMSE(test_res_p$pred_poisson, test_res_p$n_pharmacies),
-    RMSE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
-    RMSE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
+    RMSE(pred_df$pred_lm, tar),
+    RMSE(pred_df$pred_poisson, tar),
+    RMSE(pred_df$pred_quasipoisson, tar),
+    RMSE(pred_df$pred_quasipoisson, tar)
   ),
   R2 = c(
-    R2(test_res_p$pred_lm, test_res_p$n_pharmacies),
-    R2(test_res_p$pred_poisson, test_res_p$n_pharmacies),
-    R2(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
-    R2(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
-  )
-)
-post_test_performance
+    R2(pred_df$pred_lm, tar),
+    R2(pred_df$pred_poisson, tar),
+    R2(pred_df$pred_quasipoisson, tar),
+    R2(pred_df$pred_quasipoisson, tar)
+  ))
+  return(df)
+  }
+ptp_p <- post_test_performance(test_res_p, test_res_p$n_pharmacies)
+ptp_p
 ```
 
 ```{r}
-post_test_performance %>% 
+ptp_p %>% 
   cbind(
     MAE_train = c(mean(lm_fit_pharmacy$resample$MAE),
                   mean(poisson_fit_pharmacy$resample$MAE),
@@ -426,8 +446,85 @@ Although quasi poisson and negative binominal models are comparable on their per
 ### School
 
 ```{r}
+set.seed(100507500)
 
+#Linear Model
+lm_fit_school <- train(n_schools ~ ., data = trainData_s, 
+                method = "lm", 
+                trControl = train_control)
+
+#Poisson model
+poisson_fit_school <- train(n_schools ~ ., data = trainData_s,
+                              method = "glm", family = "poisson",
+                              trControl = train_control)
+
+#Quasi-Poisson
+quasi_poisson_fit_school <- train(n_schools ~ ., data = trainData_s,
+                              method = "glm", family = "quasi",
+                              trControl = train_control)
+
+#Negative Binomial model
+neg_bin_fit_school <- train(n_schools ~ ., data = trainData_s,
+                              method = "glm.nb",
+                              trControl = train_control) 
 ```
+
+```{r}
+#Compare model performance on trainData
+results_s <- resamples(list(linear = lm_fit_school, 
+                          poisson = poisson_fit_school,
+                          quasi_poisson = quasi_poisson_fit_school,
+                          neg_bin = neg_bin_fit_school))
+summary(results_s)
+
+bwplot(results_s, scales = list(x=list(relation="free"), y=list(relation="free")))
+```
+
+```{r}
+# Compare models using Achaiche information criteria (AIC)
+list(AIC = AIC(lm_fit_school$finalModel, 
+               poisson_fit_school$finalModel, 
+               quasi_poisson_fit_school$finalModel,
+               neg_bin_fit_school$finalModel))
+```
+
+```{r}
+test_res_s <- testData_s %>% mutate(
+  pred_lm = predict(lm_fit_school, testData_s),
+  pred_poisson = predict(poisson_fit_school, testData_s),
+  pred_quasipoisson = predict(quasi_poisson_fit_school, testData_s),
+  pred_neg_bin = predict(neg_bin_fit_school, testData_s)
+)
+
+ptp_s <- post_test_performance(test_res_s, test_res_p$n_schools)
+ptp_s
+```
+
+```{r}
+ptp_s %>% 
+  cbind(
+    MAE_train = c(mean(lm_fit_school$resample$MAE),
+                  mean(poisson_fit_school$resample$MAE),
+                  mean(quasi_poisson_fit_school$resample$MAE),
+                  mean(neg_bin_fit_school$resample$MAE)),
+    RMSE_train = c(mean(lm_fit_school$resample$RMSE),
+                   mean(poisson_fit_school$resample$RMSE),
+                   mean(quasi_poisson_fit_school$resample$RMSE),
+                   mean(neg_bin_fit_school$resample$RMSE)),
+    R2_train = c(mean(lm_fit_school$resample$Rsquared),
+                 mean(poisson_fit_school$resample$Rsquared),
+                 mean(quasi_poisson_fit_school$resample$Rsquared),
+                 mean(neg_bin_fit_school$resample$Rsquared))
+  ) %>% 
+  mutate(
+    MAE_diff = MAE_train - MAE,
+    RMSE_diff = RMSE_train - RMSE,
+    R2_diff = R2_train - R2
+  ) %>% 
+  select(model, contains("diff"))
+```
+
+Poisson model seems to have better performance on test set.
 
 ### Transport POS
 
