@@ -265,10 +265,11 @@ We hypothesise that there is a cap for the incremental relationship between the 
 ## Splitting Dataset
 
 ```{r}
+set.seed(100507500)
 toTrain <- createDataPartition(fe_p$n_pharmacies, p = .80, list = FALSE)
 
-trainData <- fe_p[toTrain,]
-testData <- fe_p[-toTrain,]
+trainData_p <- fe_p[toTrain,]
+testData_p <- fe_p[-toTrain,]
 ```
 
 ## Baseline Model
@@ -314,31 +315,38 @@ set.seed(100507500)
 train_control <- trainControl(method = "cv", number = 10)
 
 #Linear Model
-lm_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData, 
+lm_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData_p, 
                 method = "lm", 
                 trControl = train_control)
 
 lm_fit_pharmacy
 
 #Poisson model
-poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
+poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData_p,
                               method = "glm", family = "poisson",
                               trControl = train_control)
 poisson_fit_pharmacy
 
 #Quasi-Poisson
-quasi_poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData,
+quasi_poisson_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData_p,
                               method = "glm", family = "quasi",
                               trControl = train_control)
 
 quasi_poisson_fit_pharmacy
+
+#Negative Binomial model
+neg_bin_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData_p,
+                              method = "glm.nb",
+                              trControl = train_control) 
+neg_bin_fit_pharmacy
 ```
 
 ```{r}
 #Compare model performance on trainData
 results <- resamples(list(linear = lm_fit_pharmacy, 
                           poisson = poisson_fit_pharmacy,
-                          quasi_poisson = quasi_poisson_fit_pharmacy))
+                          quasi_poisson = quasi_poisson_fit_pharmacy,
+                          neg_bin = neg_bin_fit_pharmacy))
 summary(results)
 
 bwplot(results, scales = list(x=list(relation="free"), y=list(relation="free")))
@@ -350,40 +358,70 @@ On train data, lm performs better than the rest.
 # Compare models using Achaiche information criteria (AIC)
 list(AIC = AIC(lm_fit_pharmacy$finalModel, 
                poisson_fit_pharmacy$finalModel, 
-               quasi_poisson_fit_pharmacy$finalModel))
+               quasi_poisson_fit_pharmacy$finalModel,
+               neg_bin_fit_pharmacy$finalModel))
 ```
-
-```{r}
-#Importance variables
-tibble(
-  lm = rownames(varImp(lm_fit_pharmacy)$importance)[1:20],
-  poisson = rownames(varImp(poisson_fit_pharmacy)$importance)[1:20],
-  quasi_poisson = rownames(varImp(quasi_poisson_fit_pharmacy)$importance)[1:20]
-)
-```
-
-Most important variables: area, population, family income, income per capita, average age, and spanish percentage.
 
 ```{r}
 #Predict on testData
-test_phar <- testData %>% mutate(
-  pred_lm = predict(lm_fit_pharmacy, testData),
-  pred_poisson = predict(poisson_fit_pharmacy, testData),
-  pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData)
+test_res_p <- testData_p %>% mutate(
+  pred_lm = predict(lm_fit_pharmacy, testData_p),
+  pred_poisson = predict(poisson_fit_pharmacy, testData_p),
+  pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData_p),
+  pred_neg_bin = predict(neg_bin_fit_pharmacy, testData_p)
+  
 )
-test_phar %>% select(n_pharmacies,contains("pred"))
+
+#Compare model performance on testData
+post_test_performance <- data.frame(
+  model = c("lm", "poisson", "quasi_poisson", "neg_bin"),
+  MAE = c(
+    MAE(test_res_p$pred_lm, test_res_p$n_pharmacies),
+    MAE(test_res_p$pred_poisson, test_res_p$n_pharmacies),
+    MAE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
+    MAE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
+  ),
+  RMSE = c(
+    RMSE(test_res_p$pred_lm, test_res_p$n_pharmacies),
+    RMSE(test_res_p$pred_poisson, test_res_p$n_pharmacies),
+    RMSE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
+    RMSE(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
+  ),
+  R2 = c(
+    R2(test_res_p$pred_lm, test_res_p$n_pharmacies),
+    R2(test_res_p$pred_poisson, test_res_p$n_pharmacies),
+    R2(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies),
+    R2(test_res_p$pred_quasipoisson, test_res_p$n_pharmacies)
+  )
+)
+post_test_performance
 ```
 
 ```{r}
-#Compare model performance on testData
-list(
-  lm = mae(test_phar$pred_lm, test_phar$n_pharmacies),
-  poisson = mae(test_phar$pred_poisson, test_phar$n_pharmacies),
-  quasi_poisson = mae(test_phar$pred_quasipoisson, test_phar$n_pharmacies)
-)
+post_test_performance %>% 
+  cbind(
+    MAE_train = c(mean(lm_fit_pharmacy$resample$MAE),
+                  mean(poisson_fit_pharmacy$resample$MAE),
+                  mean(quasi_poisson_fit_pharmacy$resample$MAE),
+                  mean(neg_bin_fit_pharmacy$resample$MAE)),
+    RMSE_train = c(mean(lm_fit_pharmacy$resample$RMSE),
+                  mean(poisson_fit_pharmacy$resample$RMSE),
+                  mean(quasi_poisson_fit_pharmacy$resample$RMSE),
+                  mean(neg_bin_fit_pharmacy$resample$RMSE)),
+    R2_train = c(mean(lm_fit_pharmacy$resample$Rsquared),
+                  mean(poisson_fit_pharmacy$resample$Rsquared),
+                  mean(quasi_poisson_fit_pharmacy$resample$Rsquared),
+                  mean(neg_bin_fit_pharmacy$resample$Rsquared))
+  ) %>% 
+  mutate(
+    MAE_diff = MAE_train - MAE,
+    RMSE_diff = RMSE_train - RMSE,
+    R2_diff = R2_train - R2
+  ) %>% 
+  select(model, contains("diff"))
 ```
 
-On test data, lm and quasi_poisson performs better.
+Although quasi poisson and negative binominal models are comparable on their performance on the test set, the difference of parameters between train set and test set of quasi poisson is less than negative binomial so it might be a better model.
 
 ### School
 
