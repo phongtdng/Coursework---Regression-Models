@@ -15,7 +15,7 @@ library(corrplot)
 library(glmnet)
 library(caret) 
 library(Metrics)
-library(MASS)
+#library(MASS) #Conflict with dplyr
 library(e1071)
 ```
 
@@ -152,36 +152,7 @@ findCorrelation(
 )
 ```
 
-```{r}
-cor_rank <- function(data, col) {
-  cor<- cor(data, method = "pearson") %>% 
-  data.frame() %>% 
-  round(.,2) %>% 
-  select(all_of(col)) %>% 
-  filter(!(rownames(.) %in% c("n_pharmacies", "n_transport_salespoints", "n_schools")))
-  cor <- arrange(cor, desc(ifelse(cor[[col]] < 0, cor[[col]] * (-1), cor[[col]])))
-  return(cor)
-}
-
-cor_df_pharmacy <- cor_rank(df_num, "n_pharmacies")
-cor_df_pharmacy
-```
-
-It seems that the percentage of Italian in the census has the highest correlation to the number of pharmacies in the area. Although, it might not make logical sense, sometimes cultural factors have a lot of influence of the distribution of facilities in a city. City_population, population and income_per_capita are the next top variables correlated to the number of pharmacies. It is normal to think that these are relevant as more populated areas would need more facilities. It is worth noting that city_population and population might produce multicolinearity as they one influences the other so we might need to remove one of them. Some variables have very low (close to 0) correlation so we might consider removing them for the model accuracy.
-
-```{r}
-cor_df_school <- cor_rank(df_num, "n_schools")
-cor_df_school
-```
-
-For number of schools, population density have quite high correlation (-0.44) and so does population (0.32). It makes sense that larger population might need more schools and high population density area would indicate less area for building schools. Younger age group percentage (0-24) also has some positive correlation to school, which makes sense as this group of population demands for education.
-
-```{r}
-cor_df_transport <- cor_rank(df_num, "n_transport_salespoints")
-cor_df_transport
-```
-
-It seems that foreigner and non-foreigner (spanish) population are correlated to the distribution of number of transport sales points. It is noted that foreigners and pcg_foreigners might be identical so we will only use one of them to build the model.
+It seems that a couple of variables are correlated to each other, which might create a problem (multicolinearity) when we run the model so we should consider removing some of them for better model performance.
 
 ### Zero Variance Variables
 
@@ -216,18 +187,24 @@ Foreginers and pcg_foreigners have the same values, thus, we will only need to i
 #### Dimensionality Reduction
 
 ```{r}
+set.seed(100507500)
 elastic_p <- train(
   n_pharmacies ~., data = df_num, method = "glmnet",
   trControl = trainControl("cv", number = 10),
   tuneLength = 10
   )
-coef(elastic_p$finalModel, elastic_p$bestTune$lambda) %>% 
+
+#Columns with 0 coefs
+coef0_p <- coef(elastic_p$finalModel, elastic_p$bestTune$lambda) %>% 
   as.matrix() %>% 
   data.frame() %>% 
-  filter(s1 == 0)
+  filter(s1 == 0) %>% 
+  row.names()
+coef0_p 
 ```
 
 ```{r}
+set.seed(100507500)
 elastic_s <- train(
   n_schools ~., data = df_num, method = "glmnet",
   trControl = trainControl("cv", number = 10),
@@ -240,6 +217,7 @@ coef(elastic_s$finalModel, elastic_s$bestTune$lambda) %>%
 ```
 
 ```{r}
+set.seed(100507500)
 elastic_t <- train(
   n_transport_salespoints ~., data = df_num, method = "glmnet",
   trControl = trainControl("cv", number = 10),
@@ -258,7 +236,7 @@ selected_features <- df %>%
   select(-c(index, province_code, census_section_code, census_district_code, city_code, pcg_foreigners, geometry, centroid))
 
 fs_p <- df_num %>% 
-  select(-c(lat, avg_age, foreigners, europeans, germans, romanian, moroccan, american, chilean, pcg_age_25_39))
+  select(-all_of(coef0_p))
 ```
 
 # Feature engineering
@@ -276,16 +254,11 @@ fe_df <- selected_features %>%
   )
 
 fe_p <- fs_p %>% 
-  mutate(
-    population_2 = population**2,
-    population_density_2 = population_density**2,
-    city_population_2 = city_population**2,
-    family_income_2 = family_income**2,
-    income_per_capita_2 = income_per_capita**2
-  )
+  mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
+  mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
 ```
 
-We hypothesise that as population increases the facilities should also increase as the need and demand would be higher. Income could also affect the number of facilities as the census would have more capital to build facilities. We also found some correlation between age and number of schools as the younger age group would need access to schools, meaning more schools needed in the area. Finally, we also found some correlation between foreigner percentage and number of transport sales points, indicating cultural influence on facility distribution. We expect that the relationship between these variables and our target variables have a cap (as each census can only hold a certain maximum people depending on their layout and size). Therefore, we create a quadratic term for each of those variables to see if they will help our model.
+We hypothesise that there is a cap for the incremental relationship between the predictor and the response variable, for example an increase in area could mean a higher amount of facilities but there is a max a amount of facilities that could be built due to other reasons like population density, income, etc. Therefore, we are adding quadratic and cubic terms to help the model performance.
 
 # Regression models
 
@@ -372,6 +345,13 @@ bwplot(results, scales = list(x=list(relation="free"), y=list(relation="free")))
 ```
 
 On train data, lm performs better than the rest.
+
+```{r}
+# Compare models using Achaiche information criteria (AIC)
+list(AIC = AIC(lm_fit_pharmacy$finalModel, 
+               poisson_fit_pharmacy$finalModel, 
+               quasi_poisson_fit_pharmacy$finalModel))
+```
 
 ```{r}
 #Importance variables
