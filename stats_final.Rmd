@@ -623,7 +623,39 @@ Quasi-poisson or Negative Binomial seems to be an apt model. Since we ran into p
 ## Score generation
 
 ```{r}
-# TO DO
+#Train on whole data set
+#Pharmacy
+finalModel_p <- train(n_pharmacies ~ ., data = fe_p,
+                              method = "glm", family = "quasi",
+                              trControl = train_control)
+#School
+finalModel_s <- train(n_schools ~ ., data = fe_s,
+                              method = "glm.nb",
+                              trControl = train_control)
+#Transport
+finalModel_t <- train(n_transport_salespoints ~ ., data = fe_t,
+                                      method = "glm", family = "quasi",
+                                      trControl = train_control)
+```
+
+```{r}
+#Final predictions
+finalPred_p <- predict(finalModel_p, fe_p)
+finalPred_s <- predict(finalModel_s, fe_s)
+finalPred_t <- predict(finalModel_t, fe_t)
+```
+
+```{r}
+#Score generation
+score_df <- df %>% 
+  mutate(score_pharmacy = floor(finalPred_p),
+         score_school = floor(finalPred_s),
+         score_transport = floor(finalPred_t),
+         lack_facilities = ifelse(score_pharmacy > n_pharmacies|
+                                    score_school > n_schools |
+                                    score_transport > n_transport_salespoints,
+                                  1,
+                                  0))
 ```
 
 # Result analysis and visualization
