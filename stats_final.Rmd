@@ -230,6 +230,7 @@ coef0_t <- coef(elastic_t$finalModel, elastic_t$bestTune$lambda) %>%
   data.frame() %>% 
   filter(s1 == 0) %>% 
   row.names()
+coef0_t
 ```
 
 #### Final Selection
@@ -268,8 +269,8 @@ fe_s <- fs_s %>%
   mutate(across(c("area":"family_income", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
 
 fe_t <- fs_t %>% 
-  mutate(across(c("area","population":"avg_age", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
-  mutate(across(c("area","population":"avg_age", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
+  mutate(across(c("area","population":"income_per_capita", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
+  mutate(across(c("area","population":"income_per_capita", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
 ```
 
 We hypothesise that there is a cap for the incremental relationship between the predictor and the response variable, for example an increase in area could mean a higher amount of facilities but there is a max a amount of facilities that could be built due to other reasons like population density, income, etc. Therefore, we are adding quadratic and cubic terms to help the model performance.
@@ -355,7 +356,6 @@ quasi_poisson_fit_pharmacy
 neg_bin_fit_pharmacy <- train(n_pharmacies ~ ., data = trainData_p,
                               method = "glm.nb",
                               trControl = train_control) 
-neg_bin_fit_pharmacy
 ```
 
 ```{r}
@@ -386,7 +386,6 @@ test_res_p <- testData_p %>% mutate(
   pred_poisson = predict(poisson_fit_pharmacy, testData_p),
   pred_quasipoisson = predict(quasi_poisson_fit_pharmacy, testData_p),
   pred_neg_bin = predict(neg_bin_fit_pharmacy, testData_p)
-  
 )
 
 #Compare model performance on testData
@@ -496,7 +495,7 @@ test_res_s <- testData_s %>% mutate(
   pred_neg_bin = predict(neg_bin_fit_school, testData_s)
 )
 
-ptp_s <- post_test_performance(test_res_s, test_res_p$n_schools)
+ptp_s <- post_test_performance(test_res_s, test_res_s$n_schools)
 ptp_s
 ```
 
@@ -524,13 +523,102 @@ ptp_s %>%
   select(model, contains("diff"))
 ```
 
-Poisson model seems to have better performance on test set.
+Negative binomial model seems to be the most appropriate model (low error, lowest AIC).
 
 ### Transport POS
 
 ```{r}
+set.seed(100507500)
 
+#Linear Model
+lm_fit_transport <- train(n_transport_salespoints ~ ., data = trainData_t, 
+                           method = "lm", 
+                           trControl = train_control)
+
+# Poisson model
+poisson_fit_transport <- train(n_transport_salespoints ~ ., data = trainData_t,
+                                method = "glm", family = "poisson",
+                                trControl = train_control)
+
+# Quasi-Poisson
+quasi_poisson_fit_transport <- train(n_transport_salespoints ~ ., data = trainData_t,
+                                      method = "glm", family = "quasi",
+                                      trControl = train_control)
+
+# Negative Binomial model
+neg_bin_fit_transport <- train(n_transport_salespoints ~ ., data = trainData_t,
+                               method = "glm.nb",
+                               trControl = train_control)
 ```
+
+```{r}
+#Compare model performance on trainData
+results_t <- resamples(list(linear = lm_fit_transport, 
+                            poisson = poisson_fit_transport,
+                            quasi_poisson = quasi_poisson_fit_transport,
+                            neg_bin = neg_bin_fit_transport))
+summary(results_t)
+
+bwplot(results_t, scales = list(x = list(relation = "free"), y = list(relation = "free")))
+```
+
+The range of RMSE and MAE of poisson model are strangely high, indicating it might not be an appropriate model. We will not consider it.
+
+```{r}
+#Compare model performance on trainData
+results_t <- resamples(list(linear = lm_fit_transport, 
+                            quasi_poisson = quasi_poisson_fit_transport,
+                            neg_bin = neg_bin_fit_transport))
+summary(results_t)
+
+bwplot(results_t, scales = list(x = list(relation = "free"), y = list(relation = "free")))
+```
+
+```{r}
+# Compare models using Achaiche information criteria (AIC)
+list(AIC = AIC(lm_fit_transport$finalModel, 
+               poisson_fit_transport$finalModel, 
+               quasi_poisson_fit_transport$finalModel,
+               neg_bin_fit_transport$finalModel))
+```
+
+```{r}
+test_res_t <- testData_t %>% mutate(
+  pred_lm = predict(lm_fit_transport, testData_t),
+  pred_poisson = predict(poisson_fit_transport, testData_t),
+  pred_quasipoisson = predict(quasi_poisson_fit_transport, testData_t),
+  pred_neg_bin = predict(neg_bin_fit_transport, testData_t)
+)
+
+ptp_t <- post_test_performance(test_res_t, test_res_t$n_transport_salespoints)
+ptp_t
+```
+
+```{r}
+ptp_t %>% 
+  cbind(
+    MAE_train = c(mean(lm_fit_transport$resample$MAE),
+                  mean(poisson_fit_transport$resample$MAE),
+                  mean(quasi_poisson_fit_transport$resample$MAE),
+                  mean(neg_bin_fit_transport$resample$MAE, na.rm=T)),
+    RMSE_train = c(mean(lm_fit_transport$resample$RMSE),
+                   mean(poisson_fit_transport$resample$RMSE),
+                   mean(quasi_poisson_fit_transport$resample$RMSE),
+                   mean(neg_bin_fit_transport$resample$RMSE, na.rm=T)),
+    R2_train = c(mean(lm_fit_transport$resample$Rsquared),
+                 mean(poisson_fit_transport$resample$Rsquared),
+                 mean(quasi_poisson_fit_transport$resample$Rsquared),
+                 mean(neg_bin_fit_transport$resample$Rsquared, na.rm=T))
+  ) %>% 
+  mutate(
+    MAE_diff = MAE_train - MAE,
+    RMSE_diff = RMSE_train - RMSE,
+    R2_diff = R2_train - R2
+  ) %>% 
+  select(model, contains("diff"))
+```
+
+Quasi-poisson or Negative Binomial seems to be an apt model. Since we ran into problems while training the Negative Binomial (some folds have NAs) we will use quasi-poisson instead.
 
 ## Score generation
 
