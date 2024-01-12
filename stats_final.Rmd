@@ -734,8 +734,25 @@ plot(varImp(logReg_final), top = 10)
 
 It is noted that the performance of the Logistic Regression model is moderate( Accuracy = \`r getTrainPerf(logReg_final)\$TrainAccuracy\` ) and there might be more models that could perform better.
 
-Using this model, we made final predictions on the original data set to obtain an estimate of which censuses are in need of more facilities.
+Using this model, we made final predictions on the original data set to obtain an estimate of which censuses are in need of more facilities. Below is a map showing censuses that might be lacking facilities.
 
 ```{r}
+library(sf)
+map <- st_as_sf(df_final, wkt = "geometry")
 
+ggplot(data = map) +
+  geom_sf(aes(fill = lack_facilities_pred),
+          lwd = 0.2,
+          color = "grey60") +
+  scale_fill_manual(values = c("grey85", "red3")) +
+  labs(
+    fill = "Census lacking facilities",
+    title = "Map of censuses with low facilities"
+  ) +
+  theme_bw() +
+  theme(
+    plot.title = element_text(size = 16, face = "bold")
+  )
 ```
+
+In order to improve the access to facilities, we can further analyse the data of these censuses with close attention to the variables mentioned above.
