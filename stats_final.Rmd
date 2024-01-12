@@ -15,7 +15,6 @@ library(corrplot)
 library(glmnet)
 library(caret) 
 library(Metrics)
-#library(MASS) #Conflict with dplyr
 library(e1071)
 ```
 
@@ -719,6 +718,24 @@ df_final <- df %>%
 
 # Result analysis and visualization
 
+From the descriptive analysis, we see that our target variables are not evenly distributed throughout the censuses. Some censuses have 0 facilities while some area have an excessive amount compared to the average. This could have been due to the distribution in population as some areas are more populated and therfore might need more facilities.
+
+We then conducted that correlation analysis and learned that some variables correlated to each other so multicolinearity was a potential issue and we would need to remove some variables in order to enhance the model's performance. We also did a zero variance analysis to check for variables with low to 0 variance so we could eliminate them from the data set since they would not offer any useful information to the model.
+
+We selected the features after removing the duplicated and low variance variables, then further reduced the dimension of the data set using an ElasticNet model. In our case, the selected model had an alpha = 1 so the model is essentially a Lasso Regression model. For each of the target variable, we obtained different dimension reduction results and we created 3 different data frames for each of the target variable according to these results.
+
+After training different models and compared their performance on train set and test set, we saw that they were not exactly the most appropriate models (with low R2 and little improvement on the fitness compared the baseline model). It is probably that our predictors and response variables do not follow a linear relationship, which our models are based on, therefore the models could not perform well. For more accurate results, we should consider other models.
+
+Acknowledging these limitations, we continued with the best models out of the ones that we trained (Quasi-poisson Regression for n_pharmacies and n_transport_salespoints, Negative Binomial Regression for n_schools). Using these models to make prediction on the entire dataset, we obtained a score to decide whether a census lacks facilities ("Yes" for censuses with actual values \< predicted values in any of the 3 target variables). Finally, we then trained a Logistic Regression model to classify whether the lack the facilities or not. This helped us find out that the top variables related to the lack of facilities are population and certain percentage of certain nationality groups, along with the area, home expense, average age, and position of the census (longitude).
+
 ```{r}
-# TO DO
+plot(varImp(logReg_final), top = 10)
+```
+
+It is noted that the performance of the Logistic Regression model is moderate( Accuracy = \`r getTrainPerf(logReg_final)\$TrainAccuracy\` ) and there might be more models that could perform better.
+
+Using this model, we made final predictions on the original data set to obtain an estimate of which censuses are in need of more facilities.
+
+```{r}
+
 ```
