@@ -4,6 +4,10 @@ title: "Data Science II - Assignment"
 output: html_document
 ---
 
+```{r include = FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+```
+
 # Loading packages
 
 ```{r setup, include=FALSE}
@@ -16,6 +20,7 @@ library(glmnet)
 library(caret) 
 library(Metrics)
 library(e1071)
+library(pROC)
 ```
 
 # Problem description
@@ -136,6 +141,8 @@ plot_boxplot(df_num, by = "n_schools")
 plot_boxplot(df_num, by = "n_transport_salespoints")
 ```
 
+With lots of predictors in the data set it is difficult to understand all of them and their relations to our response variables. We will instead check them with correlation analysis.
+
 ### Correlation Analysis
 
 ```{r}
@@ -175,7 +182,7 @@ Province_code also only has 1 observation, therefore, it will not be useful for 
 df %>% distinct(pcg_num_transaction_city)
 ```
 
-pcg_num_transaction_city has some variation in values so we will keep it for now.
+pcg_num_transaction_city has some variation in values so we will keep it for now since our data set is also not too big.
 
 ```{r}
 cor(df$foreigners, df$pcg_foreigners)
@@ -235,30 +242,19 @@ coef0_t
 #### Final Selection
 
 ```{r}
-fs_p <- df_num %>% 
+fs_p <- df_num %>% #Pharmacy
   select(-all_of(coef0_p))
 
-fs_s <- df_num %>% 
+fs_s <- df_num %>% #School
   select(-all_of(coef0_s))
 
-fs_t <- df_num %>% 
+fs_t <- df_num %>% #Transport POS
   select(-all_of(coef0_t))
 ```
 
 # Feature engineering
 
 ```{r}
-fe_df <- selected_features %>% 
-  mutate(
-    population_2 = population**2,
-    population_density_2 = population_density**2,
-    city_population_2 = city_population**2,
-    family_income_2 = family_income**2,
-    income_per_capita_2 = income_per_capita**2,
-    avg_age_2 = avg_age**2,
-    foreigners_2 = foreigners**2
-  )
-
 fe_p <- fs_p %>% 
   mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**2,.names = "{.col}_2")) %>% 
   mutate(across(c("area":"income_per_capita", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
@@ -272,7 +268,7 @@ fe_t <- fs_t %>%
   mutate(across(c("area","population":"income_per_capita", "city_population", "population_density"),~.x**3,.names = "{.col}_3"))
 ```
 
-We hypothesise that there is a cap for the incremental relationship between the predictor and the response variable, for example an increase in area could mean a higher amount of facilities but there is a max a amount of facilities that could be built due to other reasons like population density, income, etc. Therefore, we are adding quadratic and cubic terms to help the model performance.
+We hypothesise that there is a cap for the incremental relationship between the predictor and the response variable, for example an increase in area could mean a higher amount of facilities but there is a max a amount of facilities that could be built due to other reasons like population density, income, etc. Essentially, the relationships of these predictors and the response variables might not be linear. Therefore, we are adding quadratic and cubic terms to help the model's performance.
 
 # Regression models
 
@@ -321,11 +317,13 @@ error_summary(testData_s$n_schools, mean(trainData_s$n_schools))
 error_summary(testData_t$n_transport_salespoints, mean(trainData_t$n_transport_salespoints))
 ```
 
+We compute our baseline models only using the average of the target variable. These models to help us see if our regression models make a difference.
+
 ## Regression Models
 
 ### Pharmacy
 
-```{r}
+```{r warning=FALSE}
 set.seed(100507500)
 
 #Train model
@@ -368,7 +366,7 @@ summary(results_p)
 bwplot(results_p, scales = list(x=list(relation="free"), y=list(relation="free")))
 ```
 
-On train data, lm performs better than the rest.
+All of our models seem to be better than the baseline model (lower error and higher R squared). Although the improvement is small, we have obtained better models with better fit and will help us understand the relationship between the predictors and the response variable and make better predictions.
 
 ```{r}
 # Compare models using Achaiche information criteria (AIC)
@@ -377,6 +375,8 @@ list(AIC = AIC(lm_fit_pharmacy$finalModel,
                quasi_poisson_fit_pharmacy$finalModel,
                neg_bin_fit_pharmacy$finalModel))
 ```
+
+It seems that Quasi-poisson or Negative Binomial are better model to predict n_pharmacies basing on the AIC and the previous metrics on train set.
 
 ```{r}
 #Predict on testData
@@ -439,7 +439,9 @@ ptp_p %>%
   select(model, contains("diff"))
 ```
 
-Although quasi poisson and negative binominal models are comparable on their performance on the test set, the difference of parameters between train set and test set of quasi poisson is less than negative binomial so it might be a better model.
+Although Quasi poisson and NegativeBbinomial models are comparable on their performance on the test set, the difference of parameters between train set and test set of quasi poisson is less than negative binomial so it might be a better model.
+
+We acknowledge that these models are still not the best models to our data and there are other models that could perform better. The zero-inflated poisson could be a good model since our target variable has a lot of 0 observations. However, the caret package currently does not support it so we will not use it in this analysis.
 
 ### School
 
@@ -706,6 +708,7 @@ summary(logReg_final)
 ```
 
 ```{r}
+#Sorted list of sum of absolute coefficients of variables
 varImp(logReg_final, scale = F)
 ```
 
@@ -726,15 +729,17 @@ We selected the features after removing the duplicated and low variance variable
 
 After training different models and compared their performance on train set and test set, we saw that they were not exactly the most appropriate models (with low R2 and little improvement on the fitness compared the baseline model). It is probably that our predictors and response variables do not follow a linear relationship, which our models are based on, therefore the models could not perform well. For more accurate results, we should consider other models.
 
-Acknowledging these limitations, we continued with the best models out of the ones that we trained (Quasi-poisson Regression for n_pharmacies and n_transport_salespoints, Negative Binomial Regression for n_schools). Using these models to make prediction on the entire dataset, we obtained a score to decide whether a census lacks facilities ("Yes" for censuses with actual values \< predicted values in any of the 3 target variables). Finally, we then trained a Logistic Regression model to classify whether the lack the facilities or not. This helped us find out that the top variables related to the lack of facilities are population and certain percentage of certain nationality groups, along with the area, home expense, average age, and position of the census (longitude).
+Acknowledging these limitations, we continued with the best models out of the ones that we trained (Quasi-poisson Regression for n_pharmacies and n_transport_salespoints, Negative Binomial Regression for n_schools). Using these models to make prediction on the entire dataset, we obtained a score to decide whether a census lacks facilities ("Yes" for censuses with actual values \< predicted values in any of the 3 target variables). Finally, we then trained a Logistic Regression model to classify whether the lack the facilities or not. This helped us find out that the top variables related to the lack of facilities are population and certain percentage of certain nationality groups, along with the area, home expense, average age, and position of the census (longitude). Although, none of them are key indicators with strong influence on whether the census lacks facilities (low aggregated absolute coefficient). We can visualise the top 10 most important variables on a scale from 0 to 100 below.
 
 ```{r}
 plot(varImp(logReg_final), top = 10)
 ```
 
-It is noted that the performance of the Logistic Regression model is moderate( Accuracy = \`r getTrainPerf(logReg_final)\$TrainAccuracy\` ) and there might be more models that could perform better.
+Population seems to be the better indicator than others. This is logical as more bigger population might need more facilities, creating a higher demand. Other nationality variables might also be noteworthy. We can look into whether the censuses with high population of these nationalities do not have sustainable income or isolated from the community, etc. to find solutions that could help them overcome these issues.
 
-Using this model, we made final predictions on the original data set to obtain an estimate of which censuses are in need of more facilities. Below is a map showing censuses that might be lacking facilities.
+It is also noted that the performance of the Logistic Regression model is moderate and there might be more models that could perform better. We can also further divide the censuses to different types (lacking 1 facility, lacking 2 facilities, lacking all 3, or lacking pharmacies, lacking pharmacies and schools, etc.). For this type of problem, we would need to use a model such as multinomial classification to make the predictions.
+
+Using the Logistic Regression model, we made final predictions on the original data set to obtain an estimate of which censuses are in need of more facilities. Although the number is relatively small, these facilities are essential and hence should be adequately provided to all censuses. Below is a map showing censuses that might be lacking facilities.
 
 ```{r}
 library(sf)
@@ -747,7 +752,8 @@ ggplot(data = map) +
   scale_fill_manual(values = c("grey85", "red3")) +
   labs(
     fill = "Census lacking facilities",
-    title = "Map of censuses with low facilities"
+    title = "Map of censuses with low facilities",
+    subtitle = "(Madrid)"
   ) +
   theme_bw() +
   theme(
