@@ -640,22 +640,81 @@ finalModel_t <- train(n_transport_salespoints ~ ., data = fe_t,
 
 ```{r}
 #Final predictions
-finalPred_p <- predict(finalModel_p, fe_p)
-finalPred_s <- predict(finalModel_s, fe_s)
-finalPred_t <- predict(finalModel_t, fe_t)
+finalPred_p <- predict(finalModel_p, fe_p) %>% as.vector()
+finalPred_s <- predict(finalModel_s, fe_s) %>% as.vector()
+finalPred_t <- predict(finalModel_t, fe_t) %>% as.vector()
 ```
 
 ```{r}
 #Score generation
-score_df <- df %>% 
+score_df <- df_num %>% 
   mutate(score_pharmacy = floor(finalPred_p),
          score_school = floor(finalPred_s),
          score_transport = floor(finalPred_t),
          lack_facilities = ifelse(score_pharmacy > n_pharmacies|
                                     score_school > n_schools |
                                     score_transport > n_transport_salespoints,
-                                  1,
-                                  0))
+                                  "Yes",
+                                  "No")) %>% 
+  mutate(lack_facilities = as.factor(lack_facilities))
+```
+
+```{r}
+#Split data
+set.seed(100507500)
+
+fs <- score_df %>% select(-contains("n_"), -contains("score_"))
+
+toTrain_C <- createDataPartition(fs$lack_facilities, p =0.8, list=F)
+
+trainData <- fs[toTrain_C,]
+testData <- fs[-toTrain_C,]
+```
+
+```{r}
+logReg <- train(lack_facilities ~., data = trainData,
+                method = "glm", family = "binomial",
+                trControl = train_control)
+
+#Predictions
+pred <- predict(logReg, testData, type = "prob")
+predClass <- ifelse(pred$Yes > 0.3, "Yes", "No") %>% as.factor()
+# Model accuracy
+mean(predClass == testData$lack_facilities)
+```
+
+We want to increase sensitivity for the model since we want to be able to predict censuses that are actually lacking the facilities so we use 0.3 for the threshold.
+
+```{r}
+confusionMatrix(testData$lack_facilities, predClass, positive = "Yes")
+```
+
+```{r}
+getTrainPerf(logReg)
+roc(testData$lack_facilities, factor(predClass, ordered = T))
+```
+
+Although the AUC is only moderate, indicating this might not be the best model but we will use it for this problem.
+
+```{r}
+#Train on all data
+set.seed(100507500)
+logReg_final <- train(lack_facilities ~., data = fs,
+                method = "glm", family = "binomial",
+                trControl = train_control)
+
+summary(logReg_final)
+```
+
+```{r}
+varImp(logReg_final, scale = F)
+```
+
+```{r}
+predClassFinal <- predict(logReg_final, df, type = "raw")
+
+df_final <- df %>% 
+  mutate(lack_facilities_pred = predClassFinal)
 ```
 
 # Result analysis and visualization
